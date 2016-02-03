@@ -92,6 +92,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html"
@@ -117,6 +118,7 @@ var (
 	flagAlpha     = flag.Float64("alpha", 0.05, "consider change significant if p < `α`")
 	flagGeomean   = flag.Bool("geomean", false, "print the geometric mean of each file")
 	flagHTML      = flag.Bool("html", false, "print results as an HTML table")
+	flagJSON      = flag.Bool("json", false, "print results as an json")
 )
 
 var deltaTestNames = map[string]func(old, new *Benchstat) (float64, error){
@@ -147,6 +149,16 @@ func (r *row) trim() {
 	}
 }
 
+type statJson struct {
+	Config string  `json:"config"`
+	Name   string  `json:"benchmark"`
+	Mean   float64 `json:"mean"`
+	Min    float64 `json:"min"`
+	Max    float64 `json:"max"`
+	Unit   string  `json:"units"`
+	StdDev float64 `json:"std_dev"`
+}
+
 func main() {
 	log.SetPrefix("benchstat: ")
 	log.SetFlags(0)
@@ -161,6 +173,24 @@ func main() {
 	c := readFiles(flag.Args())
 	for _, stat := range c.Stats {
 		stat.ComputeStats()
+	}
+
+	if *flagJSON {
+		rendered := make([]statJson, 0, len(c.Stats))
+		for key, stat := range c.Stats {
+			row := statJson{
+				key.Config,
+				fmt.Sprintf("%s %s", key.Benchmark, metricOf(key.Unit)),
+				stat.Mean,
+				stat.Min,
+				stat.Max,
+				key.Unit,
+				stat.StdDev,
+			}
+			rendered = append(rendered, row)
+		}
+		json.NewEncoder(os.Stdout).Encode(rendered)
+		return
 	}
 
 	var tables [][]*row
@@ -471,6 +501,7 @@ func (stat *Benchstat) ComputeStats() {
 	// Compute statistics of remaining data.
 	stat.Min, stat.Max = stats.Bounds(stat.RValues)
 	stat.Mean = stats.Mean(stat.RValues)
+	stat.StdDev = stats.StdDev(stat.RValues)
 }
 
 // A Benchstat is the metrics along one axis (e.g., ns/op or MB/s)
@@ -482,6 +513,7 @@ type Benchstat struct {
 	Min     float64   // min of RValues
 	Mean    float64   // mean of RValues
 	Max     float64   // max of RValues
+	StdDev  float64   // stddev of RValues
 }
 
 // A BenchKey identifies one metric (e.g., "ns/op", "B/op") from one
