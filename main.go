@@ -568,6 +568,9 @@ func readFile(file string, c *Collection) {
 	key := BenchKey{Config: file}
 
 	text, err := ioutil.ReadFile(file)
+	if err != nil && file == "-" {
+		text, err = ioutil.ReadAll(os.Stdin)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
